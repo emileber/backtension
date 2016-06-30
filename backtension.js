@@ -156,7 +156,7 @@
         clone: function(options) {
             options = options || {};
             if (options.deep) {
-                return new this.constructor($.extend(true, {}, this.attributes));
+                return new this.constructor(Backbone.$.extend(true, {}, this.attributes));
             } else {
                 return Model.prototype.clone.call(this);
             }
