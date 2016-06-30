@@ -1,10 +1,24 @@
-define([
-    // Libs
-    'jquery',
-    'underscore',
-    'backbone',
-    'utils',
-], function($, _, Backbone, U) {
+// Backtension.js
+
+// (c) 2016 Émile Bergeron
+// Freely distributed under the MIT license
+// For usage and documentation:
+// http://backtensionjs.com
+
+(function(root, factory) {
+
+    if (typeof exports !== 'undefined') {
+        // Define as CommonJS export:
+        module.exports = factory(require("underscore"), require("backbone"));
+    } else if (typeof define === 'function' && define.amd) {
+        // Define as AMD:
+        define(["underscore", "backbone"], factory);
+    } else {
+        // Just run it:
+        factory(root._, root.Backbone);
+    }
+
+})(this, function(_, Backbone) {
 
     Backbone.Extension = {};
 
@@ -72,9 +86,7 @@ define([
          * @return {Object|Boolean}     [description]
          */
         setId: function(id, options) {
-            var attr = {};
-            attr[this.idAttribute] = id;
-            return this.set(attr, options);
+            return this.set(this.idAttribute, id, options);
         },
 
         /**
@@ -84,18 +96,16 @@ define([
          * @return {Backbone.Model}  this object, to chain function calls.
          */
         reset: function(attributes, options) {
-            // ensure default params
             var attrs = attributes || {};
             options = _.extend({ reset: true }, options);
 
-            // use underscore's function to overwrite the defaults.
+            // Overwrite the defaults with passed attributes, if any.
             var defaults = _.result(this, 'defaults');
             attrs = _.defaults(_.extend({}, defaults, attrs), defaults);
 
-            // apply
             this._reset(attrs, options);
 
-            // triggers a custom event, namespaced to model in order
+            // Triggers a custom event, namespaced to model in order
             // to avoid collision with collection's native reset event
             // when listening to a collection.
             if (!options.silent) {
@@ -116,12 +126,16 @@ define([
         },
 
         /**
-         * Check if a another model is referencing the same model id and type.
+         * Check if a another model has the same model id and type.
          * @param  {Object} model backbone
          * @return {Boolean} true if is the same type and same id.
          */
         is: function(model) {
-            return Boolean(model && (model instanceof this.constructor) && (model.id === this.id));
+            return Boolean(model && // model is defined
+                ((this === model) || // comparing to the same instance
+                    (model instanceof this.constructor) && // model is the same "class"
+                    ((!_.isUndefined(this.id) && (this.id === model.id)) || // has same id if applicable
+                        (this.cid === model.cid)))); // or same cid otherwise
         },
 
 
@@ -391,7 +405,7 @@ define([
         /**
          * Returns true if the provided prefix is in the current fragment (#).
          * @param  {string} prefix as a fragment
-         * @return {Boolean}        true if prefix is in the current fragment.
+         * @return {Boolean} true if prefix is in the current fragment.
          */
         hasPrefix: function(prefix) {
             if (prefix.charAt(0) === '#') {
