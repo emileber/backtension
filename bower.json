@@ -2,10 +2,19 @@
     "name": "backtension",
     "version": "0.0.1",
     "main": "backtension.js",
-    "dependencies": {
+    "devDependencies": {
         "backbone": ">=0.9.9",
         "jquery": ">=1.11.0",
         "underscore": ">=1.4.3"
     },
-    "ignore": ["backtension.min.js", "doc", "test", "*.yml", "*.map", "*.html", "*.ico", "*.md", "CNAME"]
+    "ignore": [
+        "doc",
+        "test",
+        "*.yml",
+        "*.map",
+        "*.html",
+        "*.ico",
+        "*.md",
+        "CNAME"
+    ]
 }
