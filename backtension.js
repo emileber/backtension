@@ -24,26 +24,36 @@
         _extend = _.extend,
         _isUndefined = _.isUndefined,
         _isEmpty = _.isEmpty,
+        _isString = _.isString,
+        _isObject = _.isObject,
+        _isArray = _.isArray,
         _each = _.each,
         _defer = _.defer,
+        _clone = _.clone,
+        _omit = _.omit,
+        _noop = _.noop,
         backbone$ = Backbone.$,
-        BackboneBackup = _.clone(Backbone),
-        BackboneExtension = Backbone.Extension = {};
+        $window = backbone$(window),
+        $document = backbone$(document),
+        delegateEventSplitter = /^(\S+)\s*(.*)$/,
+        globalEventNamespace = '.delegateGlobalEvents',
+        BackboneBackup = _clone(Backbone),
+        Backtension = Backbone.Backtension = {};
 
     /////////////////////////
     // Async helpers mixin //
     /////////////////////////
-    var BackboneExtAsync = BackboneExtension.Async = {
+    var BacktensionAsync = Backtension.Async = {
         /**
          * Utility function that resolves when all passed promises resolves and
          * set the context to this.
          * @param  {Array} promises of models, langs, namespaces to be loaded, etc.
          * @return {promise} which will resolves with this as context.
          */
-        when: function() {
+        when: function(promises) {
             var deferred = backbone$.Deferred();
 
-            backbone$.when.apply(backbone$, arguments).then(
+            backbone$.when.apply(backbone$, _isArray(promises) ? promises : arguments).then(
                 function() {
                     deferred.resolveWith(this);
                 }.bind(this),
@@ -59,7 +69,7 @@
     // Event mixin //
     /////////////////
     var Events = Backbone.Events;
-    var BackboneExtEvents = BackboneExtension.Events = _extend({}, Events, BackboneExtAsync, {
+    var BacktensionEvents = Backtension.Events = _extend({}, Events, BacktensionAsync, {
         /**
          * Make sure the other objects not null before calling
          * stopListening to ensure only some listeners are removed, not all.
@@ -79,13 +89,13 @@
             });
         },
     });
-    _extend(Backbone, BackboneExtEvents);
+    _extend(Backbone, BacktensionEvents);
 
     /////////////////
     // Model mixin //
     /////////////////
     var Model = Backbone.Model;
-    var BackboneExtModel = BackboneExtension.Model = Model.extend(_extend({}, BackboneExtEvents, {
+    var BacktensionModel = Backtension.Model = Model.extend(_extend({}, BacktensionEvents, {
 
         /**
          * Sanitize the attributes hash (defaults to this.attributes) without the
@@ -102,7 +112,7 @@
             var hasBlacklist = options.blacklist,
                 blacklist = _result(this, 'blacklist', []);
             if (hasBlacklist !== false) {
-                attrs = _.omit(attrs, _.union(blacklist, hasBlacklist));
+                attrs = _omit(attrs, _.union(blacklist, hasBlacklist));
             }
             return attrs;
         },
@@ -126,16 +136,14 @@
          * @return {Backbone.Model}  this object, to chain function calls.
          */
         reset: function(attributes, options) {
-            // ensure default params
-            var attrs = attributes || {};
             options = _extend({ reset: true }, options);
 
-            // use underscore's function to overwrite the defaults.
+            // ensure default params
             var defaults = _result(this, 'defaults');
-            attrs = _.defaults(_extend({}, defaults, attrs), defaults);
+            attributes = _.defaults(_extend({}, defaults, attributes), defaults);
 
             // apply
-            this._reset(attrs, options);
+            this._reset(attributes, options);
 
             // triggers a custom event, namespaced to model in order
             // to avoid collision with collection's native reset event
@@ -165,6 +173,7 @@
         is: function(model) {
             return Boolean(model && // model is defined? and
                 (this === model || // same instances? or
+                    this.id === model || // is this a id?
                     model instanceof this.constructor && // model is the same "class"?
                     (!_isUndefined(this.id) && this.id === model.id || // has same id if applicable?
                         this.cid === model.cid))); // or same cid otherwise?
@@ -201,7 +210,7 @@
          * @return {Backbone.Model} without an id.
          */
         duplicate: function(attrs, options) {
-            return new this.constructor(backbone$.extend(true, {}, _.omit(this.toJSON(), this.idAttribute), attrs));
+            return new this.constructor(backbone$.extend(true, {}, _omit(this.toJSON(), this.idAttribute), attrs));
         },
 
         /**
@@ -211,7 +220,7 @@
          */
         toggle: function(attrs, options) {
             if (!attrs) return;
-            if (!_.isArray(attrs)) attrs = [attrs];
+            if (!_isArray(attrs)) attrs = [attrs];
             var data = {};
             _each(attrs, function(attr) {
                 var value = this.get(attr);
@@ -229,7 +238,7 @@
          * @return {Object} Return a shallow copy of the model's attributes for JSON stringification.
          */
         toJSON: function(options) {
-            return _.clone(this.sanitizedAttributes(null, _extend({ blacklist: false }, options)));
+            return _clone(this.sanitizedAttributes(null, _extend({ blacklist: false }, options)));
         },
 
     }), {
@@ -241,13 +250,13 @@
             'read': 'GET'
         },
     });
-    Backbone.Model = BackboneExtModel;
+    Backbone.Model = BacktensionModel;
 
     //////////////////////
     // Collection mixin //
     //////////////////////
     var Collection = Backbone.Collection;
-    var BackboneExtCollection = BackboneExtension.Collection = Collection.extend(_extend({}, BackboneExtEvents, {
+    var BacktensionCollection = Backtension.Collection = Collection.extend(_extend({}, BacktensionEvents, {
         model: Backbone.Model,
 
         isValid: function(options) {
@@ -267,6 +276,8 @@
             options = options || {};
             var model = this.at(src);
 
+            if (!model) return; // no model at position `src`.
+
             this.remove(model, { silent: true });
             this.add(model, _extend({ at: dest, silent: true }, options));
             if (!options.silent) {
@@ -274,18 +285,60 @@
             }
             return this;
         },
+
+        /**
+         * Compares its models with the received models.
+         * @param  {Array} models of raw objects
+         * @return {Boolean} true if identical array of objects.
+         */
+        equals: function(models) {
+            // If we're comparing to undefined (or a falsy value)
+            // assume empty array.
+            if (!models) models = [];
+            if (this.length !== models.length) return false;
+            var self = this.toJSON({ blacklist: true, sync: false });
+            return _.isEqual(self, models);
+        },
+        /**
+         * Set 'attrs' to all models within the collection.
+         * http://stackoverflow.com/a/13887170/1218980
+         */
+        setModelAttributes: function(attrs, options) {
+            this.invoke('set', attrs, options);
+            return this;
+        },
+
+        /**
+         * Hook into the native _prepareModel to offer a standard hook
+         * when new model are added to the collection.
+         * @param  {Object} model instance or attributes hash.
+         * @param  {Object} options
+         * @return {Object} model or false on validation error.
+         */
+        _prepareModel: function(model, options) {
+            model = Collection.prototype._prepareModel.apply(this, arguments);
+            if (model) this.onNewModel(model, options);
+            return model;
+        },
+
+        /**
+         * Called when adding a new model to the collection.
+         * @param  {Object} model instance
+         * @param  {Object} options
+         */
+        onNewModel: _noop,
     }));
-    Backbone.Collection = BackboneExtCollection;
+    Backbone.Collection = BacktensionCollection;
 
     ////////////////
     // View mixin //
     ////////////////
     var View = Backbone.View;
-    var BackboneExtView = BackboneExtension.View = View.extend(_extend({}, BackboneExtEvents, {
+    var BacktensionView = Backtension.View = View.extend(_extend({}, BacktensionEvents, {
 
         constructor: function(options) {
             this.childViews = [];
-            this.url = {};
+            // this.url = {};
             View.apply(this, arguments);
         },
 
@@ -294,10 +347,11 @@
          * @type {Object}
          */
         setUrl: function(key, url) {
-            if (_.isString(key)) {
-                this.url[key] = url;
-            } else if (_.isObject(key)) {
-                _extend(this.url, key);
+            var urlObj = this.url || (this.url = {});
+            if (_isString(key)) {
+                urlObj[key] = url;
+            } else if (_isObject(key)) {
+                _extend(urlObj, key);
             }
             return this;
         },
@@ -329,7 +383,7 @@
         disableSubViews: function(options) {
             _each(this.view, function(view) {
                 if (view.disable) view.disable(options);
-            }, this);
+            });
             return this;
         },
 
@@ -343,7 +397,7 @@
         assign: function(view, elem, options) {
             options = options || {};
 
-            if (_.isString(elem)) {
+            if (_isString(elem)) {
                 // prevent assigning a global element to the view.
                 // and ensure it's only assigned to one element.
                 elem = this.$(elem).first();
@@ -379,18 +433,34 @@
          */
         generateZones: function(regions, zones) {
             if (_isUndefined(regions)) {
-                regions = this.regions;
-                this.zone = {};
-                zones = this.zone;
+                regions = _result(this, 'regions');
+                zones = this.zone = {};
             }
             _each(regions, function(value, key) {
-                if (_.isObject(value) && !_isEmpty(value)) {
-                    zones[key] = {};
-                    this.generateZones(value, zones[key]);
+                if (_isObject(value) && !_isEmpty(value)) {
+                    this.generateZones(value, zones[key] = {});
                 } else {
                     zones['$' + key] = this.$(value);
                 }
             }, this);
+            return this;
+        },
+
+        renderView: function(viewsKey, viewObj, zoneObj) {
+            zoneObj = zoneObj || this.zone;
+            viewObj = viewObj || this.view;
+            if (!_isArray(viewsKey)) viewsKey = [viewsKey];
+            _each(viewsKey, function(view) {
+                this.setViewTo(viewObj[view], zoneObj["$" + view]);
+            }, this);
+            return this;
+        },
+
+        setViewTo: function(view, $el) {
+            if (view && $el) {
+                if (!($el instanceof backbone$)) $el = backbone$($el);
+                $el.empty().append(view.render().el);
+            }
             return this;
         },
 
@@ -414,7 +484,7 @@
             this.disableSubViews(options);
         },
         /** To be overwritten by child views */
-        onDisable: _.noop,
+        onDisable: _noop,
 
         /**
          * Completely removes the view after calling onRemove.
@@ -440,7 +510,7 @@
             return View.prototype.remove.apply(this, arguments);
         },
         /** To be overwritten by child views */
-        onRemove: _.noop,
+        onRemove: _noop,
 
         /**
          * Registering to global events automatically the same way as the
@@ -451,7 +521,6 @@
             if (!events) return this;
             this.undelegateGlobalEvents();
 
-            var delegateEventSplitter = /^(\S+)\s*(.*)$/;
             _each(events, function(method, key) {
                 if (!_.isFunction(method)) method = this[method];
                 if (method) {
@@ -471,18 +540,21 @@
          * @return {Backbone.View} as a way to chain function calls.
          */
         delegateGlobal: function(eventName, selector, listener) {
-            var $elem = backbone$(_isEmpty(selector) ? window : document);
-            $elem.on(eventName + '.delegateGlobalEvents' + this.cid, selector, listener);
+            selector = selector || null;
+            var $elem = selector ? $document : $window;
+            $elem.on(eventName + globalEventNamespace + this.cid, selector, listener);
             return this;
         },
         undelegateGlobalEvents: function() {
-            backbone$(window).off('.delegateGlobalEvents' + this.cid);
-            backbone$(document).off('.delegateGlobalEvents' + this.cid);
+            var cid = this.cid;
+            $window.off(globalEventNamespace + cid);
+            $document.off(globalEventNamespace + cid);
             return this;
         },
         undelegateGlobal: function(eventName, selector, listener) {
-            var $elem = backbone$(_isEmpty(selector) ? window : document);
-            $elem.off(eventName + '.delegateGlobalEvents' + this.cid, selector, listener);
+            selector = selector || null;
+            var $elem = selector ? $document : $window;
+            $elem.off(eventName + globalEventNamespace + this.cid, selector, listener);
             return this;
         },
 
@@ -504,34 +576,34 @@
         },
 
     }));
-    Backbone.View = BackboneExtView;
+    Backbone.View = BacktensionView;
 
     //////////////////
     // Router mixin //
     //////////////////
     var Router = Backbone.Router;
-    var BackboneExtRouter = BackboneExtension.Router = Router.extend(_extend({}, BackboneExtEvents, {
+    var BacktensionRouter = Backtension.Router = Router.extend(_extend({}, BacktensionEvents, {
 
         redirect: function(route, options) {
             return Backbone.history.redirect.call(this, route, options);
         },
 
     }));
-    Backbone.Router = BackboneExtRouter;
+    Backbone.Router = BacktensionRouter;
 
     ////////////////////////////
     // Backbone.history mixin //
     ////////////////////////////
     var History = Backbone.History;
-    var BackboneExtHistory = BackboneExtension.History = History.extend(_extend({}, BackboneExtEvents, {
+    var BacktensionHistory = Backtension.History = History.extend(_extend({}, BacktensionEvents, {
         trimmedCharacters: ['#', '/', ' '],
 
         trimHash: function(hash) {
-            var trimmedCharacters = this.trimmedCharacters;
-            while (trimmedCharacters.indexOf(hash.charAt(0)) > -1) {
+            var trimChars = this.trimmedCharacters;
+            while (trimChars.indexOf(hash.charAt(0)) > -1) {
                 hash = hash.slice(1);
             }
-            while (trimmedCharacters.indexOf(hash.slice(-1)) > -1) {
+            while (trimChars.indexOf(hash.slice(-1)) > -1) {
                 hash = hash.slice(0, -1);
             }
             return hash;
@@ -570,18 +642,24 @@
         },
 
     }));
-    Backbone.History = BackboneExtHistory;
-    // _extend(Backbone.history, BackboneExtEvents, BackboneExtension.History);
+    Backbone.History = BacktensionHistory;
+
+    //////////////////////////////////
+    // Additional data and function //
+    //////////////////////////////////
+    var urlError = Backtension.urlError = function() {
+        throw new Error('A "url" property or function must be specified');
+    };
 
     ///////////////////////////////
     // swap the history instance //
     ///////////////////////////////
     var history = Backbone.history;
-    Backbone.history = new BackboneExtHistory();
+    Backbone.history = new BacktensionHistory();
 
     // call this to cancel the integration within Backbone directly
-    BackboneExtension.noConflict = function() {
-        _.extend(Backbone, BackboneBackup, {
+    Backtension.noConflict = function() {
+        _extend(Backbone, BackboneBackup, {
             Events: Events,
             Model: Model,
             Collection: Collection,
@@ -593,5 +671,5 @@
 
     };
 
-    return BackboneExtension;
+    return Backtension;
 });
