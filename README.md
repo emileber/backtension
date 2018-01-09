@@ -18,6 +18,6 @@ The same compatibility as Backbone.
 
 ## Goals
 
-Backbone was the sh!t back in 2011-2012 and most information (blog posts, tutorials, Stack Overflow answers) are now dated and often provides wrong or outdated ways to use Backbone. After having searched the web myself for solution to lots of common problems and in order to educates new (and even experienced) users to how backbone should be used, I decided that I should share the little extension I was building while developing a massive application.
+Backbone was the sh!t back in 2011-2012 and most information (blog posts, tutorials, Stack Overflow answers) is now dated and often provides wrong or outdated ways to use Backbone. After having searched the web myself for solution to lots of common problems and in order to educate new (and even experienced) users to how backbone should be used, I decided that I should share the little extension I was building while developing a massive application.
 
-Backtension will help prevent memory leaks by providing the tools and documentation to develop memory efficient applications. It'll also help performance by offering to defer tasks that are not needed immediately.
+Backtension will help prevent memory leaks by providing the tools and documentation to develop memory efficient applications. It'll also improve performance by offering to defer tasks that are not needed immediately.
