@@ -1,5 +1,7 @@
 # Backtension
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/emileber/backtension.svg)](https://greenkeeper.io/)
+
 ***Please note that this is in development and not working as-is for now. Development will resume when I have time.***
 
 Relieves the tension caused by the use of Backbone by providing an unopinionated and unobtrusive set of missing features inside of Backbone's core. These are mostly good practices that can be found around the interweb, and they're made easily available by being transparently integrated and field tested.
